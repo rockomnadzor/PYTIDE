@@ -47,7 +47,7 @@ fun PytIdeApp() {
     fun runCode() {
         isRunning = true
         showOutput = true
-        output = "Выполнение..."
+        output = "$ python3 ${fileName}\n"
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 try {
@@ -56,7 +56,7 @@ fun PytIdeApp() {
                     "Ошибка запуска Python: ${e.message}"
                 }
             }
-            output = result
+            output += result.trimEnd() + "\n\nProgram finished"
             isRunning = false
         }
     }
@@ -129,32 +129,35 @@ fun PytIdeApp() {
             }
 
             if (showOutput) {
-                Divider(color = Color(0xFFE0E0E0))
                 Column(
                     modifier = Modifier
-                        .weight(0.4f)
+                        .weight(0.45f)
                         .fillMaxWidth()
-                        .background(Color(0xFFFAFAFA))
-                        .padding(12.dp)
+                        .background(Color(0xFF0C0C0C))
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1A1A1A))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Вывод", fontSize = 12.sp, color = Color.Gray)
-                        IconButton(onClick = { showOutput = false }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color.Gray)
+                        Text("Terminal", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF9E9E9E))
+                        IconButton(onClick = { showOutput = false }, modifier = Modifier.size(26.dp)) {
+                            Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color(0xFF9E9E9E))
                         }
                     }
                     Text(
                         output,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
-                        color = Color(0xFF1A1A1A),
+                        lineHeight = 18.sp,
+                        color = Color(0xFF33FF66),
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
+                            .padding(12.dp)
                     )
                 }
             }

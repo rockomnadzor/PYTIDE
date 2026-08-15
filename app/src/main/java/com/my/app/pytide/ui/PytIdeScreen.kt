@@ -219,8 +219,7 @@ fun PytIdeApp() {
                     value = saveDialogName,
                     onValueChange = { saveDialogName = it },
                     label = { Text("Имя файла") },
-                    singleLine = true,
-                    cursorBrush = SolidColor(Color(0xFF2962FF))
+                    singleLine = true
                 )
             },
             confirmButton = {
@@ -244,8 +243,7 @@ fun PytIdeApp() {
                     value = installPackageName,
                     onValueChange = { installPackageName = it },
                     label = { Text("Название пакета (pip)") },
-                    singleLine = true,
-                    cursorBrush = SolidColor(Color(0xFF2962FF))
+                    singleLine = true
                 )
             },
             confirmButton = {

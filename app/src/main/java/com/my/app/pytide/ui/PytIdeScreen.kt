@@ -1,5 +1,8 @@
 package com.my.app.pytide.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,7 +27,6 @@ import com.my.app.pytide.python.PythonRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,21 +35,35 @@ fun PytIdeApp() {
     val scope = rememberCoroutineScope()
 
     var code by remember { mutableStateOf(TextFieldValue("print(\"Hello, PytIDE!\")\n")) }
-    var fileName by remember { mutableStateOf("main.py") }
+    var fileName by remember { mutableStateOf("new.py") }
     var output by remember { mutableStateOf("") }
     var showOutput by remember { mutableStateOf(false) }
     var isRunning by remember { mutableStateOf(false) }
 
     var showNewDialog by remember { mutableStateOf(false) }
-    var showSaveDialog by remember { mutableStateOf(false) }
     var showInstallDialog by remember { mutableStateOf(false) }
-    var saveDialogName by remember { mutableStateOf(fileName) }
     var installPackageName by remember { mutableStateOf("") }
+
+    val saveLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/x-python")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(code.text.toByteArray())
+                }
+                fileName = uri.lastPathSegment?.substringAfterLast('/') ?: fileName
+            } catch (e: Exception) {
+                output = "Ошибка сохранения: ${e.message}"
+                showOutput = true
+            }
+        }
+    }
 
     fun runCode() {
         isRunning = true
         showOutput = true
-        output = "$ python3 ${fileName}\n"
+        output = ""
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 try {
@@ -56,19 +72,9 @@ fun PytIdeApp() {
                     "Ошибка запуска Python: ${e.message}"
                 }
             }
-            output += result.trimEnd() + "\n\nProgram finished"
+            output = result.trimEnd() + "\n\nProgram finished"
             isRunning = false
         }
-    }
-
-    fun saveFile(name: String) {
-        val workDir = File(context.filesDir, "PytIDE")
-        if (!workDir.exists()) workDir.mkdirs()
-        val target = File(workDir, if (name.endsWith(".py")) name else "$name.py")
-        target.writeText(code.text)
-        fileName = target.name
-        output = "Сохранено внутри приложения: ${target.name}"
-        showOutput = true
     }
 
     Scaffold(
@@ -82,10 +88,7 @@ fun PytIdeApp() {
                     IconButton(onClick = { showNewDialog = true }) {
                         Icon(Icons.Filled.NoteAdd, contentDescription = "Новый файл", tint = Color(0xFF1A1A1A))
                     }
-                    IconButton(onClick = {
-                        saveDialogName = fileName
-                        showSaveDialog = true
-                    }) {
+                    IconButton(onClick = { saveLauncher.launch(fileName) }) {
                         Icon(Icons.Filled.Save, contentDescription = "Сохранить", tint = Color(0xFF1A1A1A))
                     }
                 },
@@ -96,70 +99,66 @@ fun PytIdeApp() {
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { if (!isRunning) runCode() },
-                containerColor = if (isRunning) Color(0xFFBDBDBD) else Color(0xFF2962FF)
-            ) {
-                if (isRunning) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = "Запустить", tint = Color.White)
+            if (!showOutput) {
+                FloatingActionButton(
+                    onClick = { if (!isRunning) runCode() },
+                    containerColor = if (isRunning) Color(0xFFBDBDBD) else Color(0xFF2962FF)
+                ) {
+                    if (isRunning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = "Запустить", tint = Color.White)
+                    }
                 }
             }
         },
         containerColor = Color.White
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-        ) {
+        if (showOutput) {
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .background(Color(0xFF0C0C0C))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1A1A1A))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(fileName, fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFB0B0B0))
+                    IconButton(onClick = { showOutput = false }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color.White)
+                    }
+                }
+                Text(
+                    if (isRunning) "Выполнение..." else output,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = Color.White,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(12.dp)
+                )
+            }
+        } else {
             Box(
                 modifier = Modifier
-                    .weight(if (showOutput) 0.6f else 1f)
-                    .fillMaxWidth()
+                    .padding(padding)
+                    .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(12.dp)
             ) {
                 CodeEditorField(value = code, onValueChange = { code = it })
-            }
-
-            if (showOutput) {
-                Column(
-                    modifier = Modifier
-                        .weight(0.45f)
-                        .fillMaxWidth()
-                        .background(Color(0xFF0C0C0C))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF1A1A1A))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Terminal", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF9E9E9E))
-                        IconButton(onClick = { showOutput = false }, modifier = Modifier.size(26.dp)) {
-                            Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color(0xFF9E9E9E))
-                        }
-                    }
-                    Text(
-                        output,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        color = Color(0xFF33FF66),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(12.dp)
-                    )
-                }
             }
         }
     }
@@ -172,7 +171,7 @@ fun PytIdeApp() {
             confirmButton = {
                 TextButton(onClick = {
                     code = TextFieldValue("")
-                    fileName = "main.py"
+                    fileName = "new.py"
                     output = ""
                     showOutput = false
                     showNewDialog = false
@@ -180,30 +179,6 @@ fun PytIdeApp() {
             },
             dismissButton = {
                 TextButton(onClick = { showNewDialog = false }) { Text("Отмена") }
-            }
-        )
-    }
-
-    if (showSaveDialog) {
-        AlertDialog(
-            onDismissRequest = { showSaveDialog = false },
-            title = { Text("Сохранить как") },
-            text = {
-                OutlinedTextField(
-                    value = saveDialogName,
-                    onValueChange = { saveDialogName = it },
-                    label = { Text("Имя файла") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    saveFile(saveDialogName)
-                    showSaveDialog = false
-                }) { Text("Сохранить") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSaveDialog = false }) { Text("Отмена") }
             }
         )
     }

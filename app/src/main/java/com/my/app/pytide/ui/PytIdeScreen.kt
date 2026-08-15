@@ -15,15 +15,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.my.app.pytide.termux.TermuxRunner
-import kotlinx.coroutines.delay
+import com.my.app.pytide.python.PythonRunner
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,59 +44,30 @@ fun PytIdeApp() {
     var saveDialogName by remember { mutableStateOf(fileName) }
     var installPackageName by remember { mutableStateOf("") }
 
-    fun watchOutput(outputFile: File) {
+    fun runCode() {
+        isRunning = true
+        showOutput = true
+        output = "Выполнение..."
         scope.launch {
-            isRunning = true
-            output = ""
-            var ticks = 0
-            while (true) {
-                delay(400)
-                if (outputFile.exists()) {
-                    val text = outputFile.readText()
-                    if (text.contains(TermuxRunner.donemarker())) {
-                        output = text.replace(TermuxRunner.donemarker(), "").trim()
-                            .ifBlank { "(нет вывода)" }
-                        break
-                    } else if (text.isNotEmpty()) {
-                        output = text
-                    }
-                }
-                ticks++
-                if (ticks > 150) {
-                    output = (output.ifBlank { "" }) +
-                        "\n\n[Нет ответа от Termux. Проверь: Termux установлен и открывался хотя бы раз, " +
-                        "в ~/.termux/termux.properties включено allow-external-apps=true, " +
-                        "разрешение RUN_COMMAND выдано PytIDE.]"
-                    break
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    PythonRunner.runCode(code.text)
+                } catch (e: Exception) {
+                    "Ошибка запуска Python: ${e.message}"
                 }
             }
+            output = result
             isRunning = false
-            showOutput = true
         }
     }
 
-    fun runCode() {
-        val workDir = TermuxRunner.workDir()
-        val scriptFile = File(workDir, fileName.ifBlank { "main.py" })
-        scriptFile.writeText(code.text)
-        val outFile = File(workDir, "output.log")
-        TermuxRunner.runInTermux(context, "python3 '/sdcard/PytIDE/${scriptFile.name}'", outFile)
-        watchOutput(outFile)
-    }
-
-    fun installLibrary(pkg: String) {
-        val workDir = TermuxRunner.workDir()
-        val outFile = File(workDir, "pip_output.log")
-        TermuxRunner.runInTermux(context, "pip install $pkg", outFile)
-        watchOutput(outFile)
-    }
-
     fun saveFile(name: String) {
-        val workDir = TermuxRunner.workDir()
+        val workDir = File(context.filesDir, "PytIDE")
+        if (!workDir.exists()) workDir.mkdirs()
         val target = File(workDir, if (name.endsWith(".py")) name else "$name.py")
         target.writeText(code.text)
         fileName = target.name
-        output = "Сохранено: /sdcard/PytIDE/${target.name}"
+        output = "Сохранено внутри приложения: ${target.name}"
         showOutput = true
     }
 
@@ -177,7 +148,7 @@ fun PytIdeApp() {
                         }
                     }
                     Text(
-                        output.ifBlank { if (isRunning) "Выполнение..." else "" },
+                        output,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
                         color = Color(0xFF1A1A1A),
@@ -194,7 +165,7 @@ fun PytIdeApp() {
         AlertDialog(
             onDismissRequest = { showNewDialog = false },
             title = { Text("Новый файл") },
-            text = { Text("Текущий код будет очищен из редактора (файл на диске не удаляется). Продолжить?") },
+            text = { Text("Текущий код будет очищен из редактора (сохранённые файлы не удаляются). Продолжить?") },
             confirmButton = {
                 TextButton(onClick = {
                     code = TextFieldValue("")
@@ -239,19 +210,38 @@ fun PytIdeApp() {
             onDismissRequest = { showInstallDialog = false },
             title = { Text("Установить библиотеку") },
             text = {
-                OutlinedTextField(
-                    value = installPackageName,
-                    onValueChange = { installPackageName = it },
-                    label = { Text("Название пакета (pip)") },
-                    singleLine = true
-                )
+                Column {
+                    Text(
+                        "Библиотеки в PytIDE зашиваются в само приложение при сборке " +
+                            "(без интернета в рантайме). Впиши название пакета — " +
+                            "получишь строку, которую нужно добавить в build.gradle.kts, " +
+                            "закоммить и запушить: GitHub Actions соберёт новый APK уже с ней.",
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = installPackageName,
+                        onValueChange = { installPackageName = it },
+                        label = { Text("Название пакета (pip)") },
+                        singleLine = true
+                    )
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (installPackageName.isNotBlank()) installLibrary(installPackageName.trim())
+                    val pkg = installPackageName.trim()
+                    if (pkg.isNotBlank()) {
+                        output = "Добавь эту строку в app/build.gradle.kts, " +
+                            "в блок chaquopy { defaultConfig { pip { ... } } }:\n\n" +
+                            "        install(\"$pkg\")\n\n" +
+                            "Потом:\ngit add .\ngit commit -m \"add $pkg\"\ngit push\n\n" +
+                            "Actions пересоберёт APK с этой библиотекой."
+                        showOutput = true
+                    }
                     showInstallDialog = false
                     installPackageName = ""
-                }) { Text("Установить") }
+                }) { Text("Показать инструкцию") }
             },
             dismissButton = {
                 TextButton(onClick = { showInstallDialog = false }) { Text("Отмена") }

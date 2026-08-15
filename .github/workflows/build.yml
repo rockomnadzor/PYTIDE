@@ -21,6 +21,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install NDK (required by Chaquopy)
+        run: sdkmanager --install "ndk;25.2.9519653"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -28,6 +31,8 @@ jobs:
 
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

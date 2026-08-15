@@ -77,6 +77,41 @@ fun PytIdeApp() {
         }
     }
 
+    if (showOutput) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0C0C0C))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .background(Color(0xFF1A1A1A))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(fileName, fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFB0B0B0))
+                IconButton(onClick = { showOutput = false }, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color.White)
+                }
+            }
+            Text(
+                if (isRunning) "Выполнение..." else output,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                color = Color.White,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(12.dp)
+            )
+        }
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -99,67 +134,31 @@ fun PytIdeApp() {
             )
         },
         floatingActionButton = {
-            if (!showOutput) {
-                FloatingActionButton(
-                    onClick = { if (!isRunning) runCode() },
-                    containerColor = if (isRunning) Color(0xFFBDBDBD) else Color(0xFF2962FF)
-                ) {
-                    if (isRunning) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = "Запустить", tint = Color.White)
-                    }
+            FloatingActionButton(
+                onClick = { if (!isRunning) runCode() },
+                containerColor = if (isRunning) Color(0xFFBDBDBD) else Color(0xFF2962FF)
+            ) {
+                if (isRunning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = "Запустить", tint = Color.White)
                 }
             }
         },
         containerColor = Color.White
     ) { padding ->
-        if (showOutput) {
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize()
-                    .background(Color(0xFF0C0C0C))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF1A1A1A))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(fileName, fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFB0B0B0))
-                    IconButton(onClick = { showOutput = false }, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color.White)
-                    }
-                }
-                Text(
-                    if (isRunning) "Выполнение..." else output,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    color = Color.White,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(12.dp)
-                )
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(12.dp)
-            ) {
-                CodeEditorField(value = code, onValueChange = { code = it })
-            }
+        Box(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp)
+        ) {
+            CodeEditorField(value = code, onValueChange = { code = it })
         }
     }
 

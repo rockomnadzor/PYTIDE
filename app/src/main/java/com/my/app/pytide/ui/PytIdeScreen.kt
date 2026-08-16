@@ -9,8 +9,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -20,7 +20,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.PlayArrow
@@ -118,35 +118,54 @@ fun PytIdeApp() {
     AnimatedContent(
         targetState = showOutput,
         transitionSpec = {
-            (fadeIn(animationSpec = tween(280)) + scaleIn(initialScale = 0.96f, animationSpec = tween(280)))
-                .togetherWith(fadeOut(animationSpec = tween(180)) + scaleOut(targetScale = 0.96f, animationSpec = tween(180)))
+            if (targetState) {
+                (slideInHorizontally(animationSpec = tween(320)) { fullWidth -> fullWidth } + fadeIn(tween(320)))
+                    .togetherWith(slideOutHorizontally(animationSpec = tween(320)) { fullWidth -> -fullWidth / 4 } + fadeOut(tween(220)))
+            } else {
+                (slideInHorizontally(animationSpec = tween(320)) { fullWidth -> -fullWidth / 4 } + fadeIn(tween(320)))
+                    .togetherWith(slideOutHorizontally(animationSpec = tween(320)) { fullWidth -> fullWidth } + fadeOut(tween(220)))
+            }
         },
         label = "screen-transition"
     ) { isTerminal ->
         if (isTerminal) {
+            val scrollState = rememberScrollState()
+
+            LaunchedEffect(output, terminalInput, isWaitingForInput) {
+                scrollState.animateScrollTo(scrollState.maxValue)
+            }
             LaunchedEffect(isWaitingForInput) {
                 if (isWaitingForInput) {
                     terminalFocusRequester.requestFocus()
                     keyboardController?.show()
                 }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-            ) {
+
+            Column(modifier = Modifier.fillMaxSize()) {
+                TopAppBar(
+                    title = { Text(fileName, fontSize = 16.sp, color = Color(0xFF1A1A1A)) },
+                    actions = {
+                        IconButton(onClick = { showOutput = false }) {
+                            Icon(Icons.Filled.ArrowBack, contentDescription = "Назад в редактор", tint = Color(0xFF1A1A1A))
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.White,
+                        titleContentColor = Color(0xFF1A1A1A)
+                    )
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .statusBarsPadding()
-                        .verticalScroll(rememberScrollState())
+                        .background(Color.Black)
+                        .verticalScroll(scrollState)
                         .padding(8.dp)
                 ) {
                     Text(
                         output,
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
+                        fontSize = 10.sp,
+                        lineHeight = 13.sp,
                         color = Color.White
                     )
                     BasicTextField(
@@ -158,25 +177,14 @@ fun PytIdeApp() {
                         textStyle = TextStyle(
                             color = Color.White,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            lineHeight = 15.sp
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp
                         ),
                         singleLine = true,
                         cursorBrush = SolidColor(Color.White),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { submitTerminalInput() })
                     )
-                }
-
-                IconButton(
-                    onClick = { showOutput = false },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .statusBarsPadding()
-                        .padding(4.dp)
-                        .size(28.dp)
-                ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color(0xFF555555))
                 }
             }
         } else {

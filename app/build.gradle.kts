@@ -55,6 +55,7 @@ chaquopy {
         version = "3.11"
         pip {
             install("requests")
+            install("pyfiglet")
         }
     }
 }

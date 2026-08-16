@@ -5,6 +5,13 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,7 +25,6 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import com.my.app.pytide.python.PythonRunner
 import com.my.app.pytide.python.TerminalIO
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PytIdeApp() {
     val context = LocalContext.current
@@ -68,8 +73,7 @@ fun PytIdeApp() {
                 }
                 fileName = uri.lastPathSegment?.substringAfterLast('/') ?: fileName
             } catch (e: Exception) {
-                output = "Ошибка сохранения: ${e.message}"
-                showOutput = true
+                output += "\nОшибка сохранения: ${e.message}"
             }
         }
     }
@@ -110,124 +114,120 @@ fun PytIdeApp() {
         }.start()
     }
 
-    if (showOutput) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF0C0C0C))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .background(Color(0xFF1A1A1A))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(fileName, fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFB0B0B0))
-                IconButton(onClick = { showOutput = false }, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color.White)
+    AnimatedContent(
+        targetState = showOutput,
+        transitionSpec = {
+            (fadeIn(animationSpec = tween(280)) + scaleIn(initialScale = 0.96f, animationSpec = tween(280)))
+                .togetherWith(fadeOut(animationSpec = tween(180)) + scaleOut(targetScale = 0.96f, animationSpec = tween(180)))
+        },
+        label = "screen-transition"
+    ) { isTerminal ->
+        if (isTerminal) {
+            LaunchedEffect(isWaitingForInput) {
+                if (isWaitingForInput) {
+                    terminalFocusRequester.requestFocus()
+                    keyboardController?.show()
                 }
             }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF161616))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    ">",
-                    color = if (isWaitingForInput) Color(0xFF33FF66) else Color(0xFF666666),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                BasicTextField(
-                    value = terminalInput,
-                    onValueChange = { terminalInput = it },
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(terminalFocusRequester),
-                    textStyle = TextStyle(
-                        color = Color.White,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 14.sp
-                    ),
-                    singleLine = true,
-                    cursorBrush = SolidColor(Color.White),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { submitTerminalInput() })
-                )
-                IconButton(onClick = { submitTerminalInput() }, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Filled.Send, contentDescription = "Отправить", tint = Color(0xFF33FF66))
-                }
-            }
-
-            Text(
-                output,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                color = Color.White,
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(12.dp)
-            )
-        }
-        return
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(fileName, fontSize = 16.sp, color = Color(0xFF1A1A1A)) },
-                actions = {
-                    IconButton(onClick = { showInstallDialog = true }) {
-                        Icon(Icons.Filled.Extension, contentDescription = "Установить библиотеку", tint = Color(0xFF1A1A1A))
-                    }
-                    IconButton(onClick = { showNewDialog = true }) {
-                        Icon(Icons.Filled.NoteAdd, contentDescription = "Новый файл", tint = Color(0xFF1A1A1A))
-                    }
-                    IconButton(onClick = { saveLauncher.launch(fileName) }) {
-                        Icon(Icons.Filled.Save, contentDescription = "Сохранить", tint = Color(0xFF1A1A1A))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White,
-                    titleContentColor = Color(0xFF1A1A1A)
-                )
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { if (!isRunning) runCode() },
-                containerColor = if (isRunning) Color(0xFFBDBDBD) else Color(0xFF2962FF)
+                    .background(Color.Black)
             ) {
-                if (isRunning) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        output,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp,
+                        color = Color.White
                     )
-                } else {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = "Запустить", tint = Color.White)
+                    BasicTextField(
+                        value = terminalInput,
+                        onValueChange = { terminalInput = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(terminalFocusRequester),
+                        textStyle = TextStyle(
+                            color = Color.White,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            lineHeight = 15.sp
+                        ),
+                        singleLine = true,
+                        cursorBrush = SolidColor(Color.White),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { submitTerminalInput() })
+                    )
+                }
+
+                IconButton(
+                    onClick = { showOutput = false },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(4.dp)
+                        .size(28.dp)
+                ) {
+                    Icon(Icons.Filled.Close, contentDescription = "Закрыть", tint = Color(0xFF555555))
                 }
             }
-        },
-        containerColor = Color.White
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(12.dp)
-        ) {
-            CodeEditorField(value = code, onValueChange = { code = it })
+        } else {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text(fileName, fontSize = 16.sp, color = Color(0xFF1A1A1A)) },
+                        actions = {
+                            IconButton(onClick = { showInstallDialog = true }) {
+                                Icon(Icons.Filled.Extension, contentDescription = "Установить библиотеку", tint = Color(0xFF1A1A1A))
+                            }
+                            IconButton(onClick = { showNewDialog = true }) {
+                                Icon(Icons.Filled.NoteAdd, contentDescription = "Новый файл", tint = Color(0xFF1A1A1A))
+                            }
+                            IconButton(onClick = { saveLauncher.launch(fileName) }) {
+                                Icon(Icons.Filled.Save, contentDescription = "Сохранить", tint = Color(0xFF1A1A1A))
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.White,
+                            titleContentColor = Color(0xFF1A1A1A)
+                        )
+                    )
+                },
+                floatingActionButton = {
+                    FloatingActionButton(
+                        onClick = { if (!isRunning) runCode() },
+                        containerColor = if (isRunning) Color(0xFFBDBDBD) else Color(0xFF2962FF)
+                    ) {
+                        if (isRunning) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "Запустить", tint = Color.White)
+                        }
+                    }
+                },
+                containerColor = Color.White
+            ) { padding ->
+                Box(
+                    modifier = Modifier
+                        .padding(padding)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(12.dp)
+                ) {
+                    CodeEditorField(value = code, onValueChange = { code = it })
+                }
+            }
         }
     }
 

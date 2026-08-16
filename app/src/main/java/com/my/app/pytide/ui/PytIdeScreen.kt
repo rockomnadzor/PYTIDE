@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.my.app.pytide.python.PythonRunner
 import com.my.app.pytide.python.TerminalIO
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PytIdeApp() {
     val context = LocalContext.current

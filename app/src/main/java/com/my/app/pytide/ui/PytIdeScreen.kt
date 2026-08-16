@@ -23,9 +23,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -39,6 +42,8 @@ import com.my.app.pytide.python.TerminalIO
 @Composable
 fun PytIdeApp() {
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val terminalFocusRequester = remember { FocusRequester() }
 
     var code by remember { mutableStateOf(TextFieldValue("print(\"Hello, PytIDE!\")\n")) }
     var fileName by remember { mutableStateOf("new.py") }
@@ -143,7 +148,9 @@ fun PytIdeApp() {
                 BasicTextField(
                     value = terminalInput,
                     onValueChange = { terminalInput = it },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(terminalFocusRequester),
                     textStyle = TextStyle(
                         color = Color.White,
                         fontFamily = FontFamily.Monospace,

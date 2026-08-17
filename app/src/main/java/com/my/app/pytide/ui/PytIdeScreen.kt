@@ -13,8 +13,11 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -44,6 +47,12 @@ import androidx.compose.ui.unit.sp
 import com.my.app.pytide.python.PythonRunner
 import com.my.app.pytide.python.TerminalIO
 
+private data class OpenFile(
+    val id: Int,
+    val name: String,
+    val code: TextFieldValue
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PytIdeApp() {
@@ -51,8 +60,13 @@ fun PytIdeApp() {
     val keyboardController = LocalSoftwareKeyboardController.current
     val terminalFocusRequester = remember { FocusRequester() }
 
-    var code by remember { mutableStateOf(TextFieldValue("print(\"Hello, PytIDE!\")\n")) }
-    var fileName by remember { mutableStateOf("new.py") }
+    var openFiles by remember {
+        mutableStateOf(listOf(OpenFile(0, "new.py", TextFieldValue("print(\"Hello, PytIDE!\")\n"))))
+    }
+    var activeFileId by remember { mutableStateOf(0) }
+    var nextId by remember { mutableStateOf(1) }
+    val activeFile = openFiles.first { it.id == activeFileId }
+
     var output by remember { mutableStateOf("") }
     var showOutput by remember { mutableStateOf(false) }
     var isRunning by remember { mutableStateOf(false) }
@@ -61,23 +75,29 @@ fun PytIdeApp() {
     var currentIO by remember { mutableStateOf<TerminalIO?>(null) }
     var runnerThread by remember { mutableStateOf<Thread?>(null) }
 
-    var showNewDialog by remember { mutableStateOf(false) }
     var showInstallDialog by remember { mutableStateOf(false) }
     var installPackageName by remember { mutableStateOf("") }
+    var savingFileId by remember { mutableStateOf<Int?>(null) }
 
     val saveLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/x-python")
     ) { uri: Uri? ->
-        if (uri != null) {
+        val targetId = savingFileId
+        if (uri != null && targetId != null) {
             try {
+                val fileToSave = openFiles.first { it.id == targetId }
                 context.contentResolver.openOutputStream(uri)?.use { out ->
-                    out.write(code.text.toByteArray())
+                    out.write(fileToSave.code.text.toByteArray())
                 }
-                fileName = uri.lastPathSegment?.substringAfterLast('/') ?: fileName
+                val newName = uri.lastPathSegment?.substringAfterLast('/') ?: fileToSave.name
+                openFiles = openFiles.map {
+                    if (it.id == targetId) it.copy(name = newName) else it
+                }
             } catch (e: Exception) {
                 output += "\nОшибка сохранения: ${e.message}"
             }
         }
+        savingFileId = null
     }
 
     fun submitTerminalInput() {
@@ -95,6 +115,7 @@ fun PytIdeApp() {
         showOutput = true
         output = ""
 
+        val codeToRun = activeFile.code.text
         val io = TerminalIO(
             onOutput = { s -> output += s },
             onWaitingChanged = { waiting -> isWaitingForInput = waiting }
@@ -103,7 +124,7 @@ fun PytIdeApp() {
 
         val thread = Thread {
             try {
-                PythonRunner.runCode(code.text, io)
+                PythonRunner.runCode(codeToRun, io)
             } catch (e: Exception) {
                 io.write("Ошибка запуска Python: ${e.message}\n")
             }
@@ -126,6 +147,13 @@ fun PytIdeApp() {
         isRunning = false
         isWaitingForInput = false
         currentIO = null
+    }
+
+    fun createNewFile() {
+        val id = nextId
+        nextId += 1
+        openFiles = openFiles + OpenFile(id, "new.py", TextFieldValue(""))
+        activeFileId = id
     }
 
     AnimatedContent(
@@ -220,24 +248,56 @@ fun PytIdeApp() {
         } else {
             Scaffold(
                 topBar = {
-                    TopAppBar(
-                        title = { Text(fileName, fontSize = 16.sp, color = Color(0xFF1A1A1A)) },
-                        actions = {
-                            IconButton(onClick = { showInstallDialog = true }) {
-                                Icon(Icons.Filled.Extension, contentDescription = "Установить библиотеку", tint = Color(0xFF1A1A1A))
-                            }
-                            IconButton(onClick = { showNewDialog = true }) {
-                                Icon(Icons.Filled.NoteAdd, contentDescription = "Новый файл", tint = Color(0xFF1A1A1A))
-                            }
-                            IconButton(onClick = { saveLauncher.launch(fileName) }) {
-                                Icon(Icons.Filled.Save, contentDescription = "Сохранить", tint = Color(0xFF1A1A1A))
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.White,
-                            titleContentColor = Color(0xFF1A1A1A)
+                    Column {
+                        TopAppBar(
+                            title = { Text(activeFile.name, fontSize = 16.sp, color = Color(0xFF1A1A1A)) },
+                            actions = {
+                                IconButton(onClick = { showInstallDialog = true }) {
+                                    Icon(Icons.Filled.Extension, contentDescription = "Установить библиотеку", tint = Color(0xFF1A1A1A))
+                                }
+                                IconButton(onClick = { createNewFile() }) {
+                                    Icon(Icons.Filled.NoteAdd, contentDescription = "Новый файл", tint = Color(0xFF1A1A1A))
+                                }
+                                IconButton(onClick = {
+                                    savingFileId = activeFile.id
+                                    saveLauncher.launch(activeFile.name)
+                                }) {
+                                    Icon(Icons.Filled.Save, contentDescription = "Сохранить", tint = Color(0xFF1A1A1A))
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = Color.White,
+                                titleContentColor = Color(0xFF1A1A1A)
+                            )
                         )
-                    )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFF3F3F3))
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            openFiles.forEach { file ->
+                                val isActive = file.id == activeFileId
+                                Box(
+                                    modifier = Modifier
+                                        .padding(end = 6.dp)
+                                        .background(
+                                            if (isActive) Color(0xFF2962FF) else Color(0xFFE0E0E0),
+                                            shape = RoundedCornerShape(6.dp)
+                                        )
+                                        .clickable { activeFileId = file.id }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        file.name,
+                                        fontSize = 12.sp,
+                                        color = if (isActive) Color.White else Color(0xFF444444)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 },
                 floatingActionButton = {
                     FloatingActionButton(
@@ -264,30 +324,17 @@ fun PytIdeApp() {
                         .verticalScroll(rememberScrollState())
                         .padding(12.dp)
                 ) {
-                    CodeEditorField(value = code, onValueChange = { code = it })
+                    CodeEditorField(
+                        value = activeFile.code,
+                        onValueChange = { newValue ->
+                            openFiles = openFiles.map {
+                                if (it.id == activeFileId) it.copy(code = newValue) else it
+                            }
+                        }
+                    )
                 }
             }
         }
-    }
-
-    if (showNewDialog) {
-        AlertDialog(
-            onDismissRequest = { showNewDialog = false },
-            title = { Text("Новый файл") },
-            text = { Text("Текущий код будет очищен из редактора (сохранённые файлы не удаляются). Продолжить?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    code = TextFieldValue("")
-                    fileName = "new.py"
-                    output = ""
-                    showOutput = false
-                    showNewDialog = false
-                }) { Text("Создать") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewDialog = false }) { Text("Отмена") }
-            }
-        )
     }
 
     if (showInstallDialog) {

@@ -18,9 +18,14 @@ class TerminalIO(
 
     fun readLine(): String {
         mainHandler.post { onWaitingChanged(true) }
-        val value = inputQueue.take()
-        mainHandler.post { onWaitingChanged(false) }
-        return value
+        return try {
+            inputQueue.take()
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            ""
+        } finally {
+            mainHandler.post { onWaitingChanged(false) }
+        }
     }
 
     fun submitInput(text: String) {

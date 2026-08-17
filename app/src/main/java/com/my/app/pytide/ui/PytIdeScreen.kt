@@ -59,6 +59,7 @@ fun PytIdeApp() {
     var isWaitingForInput by remember { mutableStateOf(false) }
     var terminalInput by remember { mutableStateOf("") }
     var currentIO by remember { mutableStateOf<TerminalIO?>(null) }
+    var runnerThread by remember { mutableStateOf<Thread?>(null) }
 
     var showNewDialog by remember { mutableStateOf(false) }
     var showInstallDialog by remember { mutableStateOf(false) }
@@ -100,7 +101,7 @@ fun PytIdeApp() {
         )
         currentIO = io
 
-        Thread {
+        val thread = Thread {
             try {
                 PythonRunner.runCode(code.text, io)
             } catch (e: Exception) {
@@ -111,8 +112,20 @@ fun PytIdeApp() {
                 isRunning = false
                 isWaitingForInput = false
                 currentIO = null
+                runnerThread = null
             }
-        }.start()
+        }
+        runnerThread = thread
+        thread.start()
+    }
+
+    fun exitTerminal() {
+        showOutput = false
+        runnerThread?.interrupt()
+        runnerThread = null
+        isRunning = false
+        isWaitingForInput = false
+        currentIO = null
     }
 
     AnimatedContent(
@@ -143,9 +156,9 @@ fun PytIdeApp() {
 
             Column(modifier = Modifier.fillMaxSize()) {
                 TopAppBar(
-                    title = { Text(fileName, fontSize = 16.sp, color = Color(0xFF1A1A1A)) },
-                    actions = {
-                        IconButton(onClick = { showOutput = false }) {
+                    title = {},
+                    navigationIcon = {
+                        IconButton(onClick = { exitTerminal() }) {
                             Icon(Icons.Filled.ArrowBack, contentDescription = "Назад в редактор", tint = Color(0xFF1A1A1A))
                         }
                     },
@@ -161,30 +174,47 @@ fun PytIdeApp() {
                         .verticalScroll(scrollState)
                         .padding(8.dp)
                 ) {
-                    Text(
-                        output,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        lineHeight = 13.sp,
-                        color = Color.White
-                    )
-                    BasicTextField(
-                        value = terminalInput,
-                        onValueChange = { terminalInput = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(terminalFocusRequester),
-                        textStyle = TextStyle(
-                            color = Color.White,
+                    val lastNewline = output.lastIndexOf('\n')
+                    val priorLines = if (lastNewline >= 0) output.substring(0, lastNewline + 1) else ""
+                    val currentLinePrefix = if (lastNewline >= 0) output.substring(lastNewline + 1) else output
+
+                    if (priorLines.isNotEmpty()) {
+                        Text(
+                            priorLines,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
-                            lineHeight = 13.sp
-                        ),
-                        singleLine = true,
-                        cursorBrush = SolidColor(Color.White),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { submitTerminalInput() })
-                    )
+                            lineHeight = 13.sp,
+                            color = Color.White
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (currentLinePrefix.isNotEmpty()) {
+                            Text(
+                                currentLinePrefix,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                lineHeight = 13.sp,
+                                color = Color.White
+                            )
+                        }
+                        BasicTextField(
+                            value = terminalInput,
+                            onValueChange = { terminalInput = it },
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(terminalFocusRequester),
+                            textStyle = TextStyle(
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                lineHeight = 13.sp
+                            ),
+                            singleLine = true,
+                            cursorBrush = SolidColor(Color.White),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = { submitTerminalInput() })
+                        )
+                    }
                 }
             }
         } else {
